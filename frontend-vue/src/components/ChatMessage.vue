@@ -1,7 +1,7 @@
 <template>
   <div
     class="chat-message"
-    :class="[`chat-message--${type}`, { 'has-image': imageUrl }]"
+    :class="[`chat-message--${type}`, { 'has-image': imageUrl, 'is-loading': isLoading }]"
   >
     <div class="chat-message__avatar">
       <el-icon v-if="type === 'user'"><UserFilled /></el-icon>
@@ -10,18 +10,27 @@
     
     <div class="chat-message__content">
       <div class="chat-message__bubble">
-        <!-- 图片在上面 -->
-        <div 
-          v-if="imageUrl" 
-          class="chat-message__image"
-          :class="{ 'is-selected': isSelected }"
-          @click="onImageClick"
-        >
-          <img :src="fullImageUrl" alt="上传图片" />
+        <!-- 加载状态 -->
+        <div v-if="isLoading" class="chat-message__loading">
+          <el-skeleton :rows="3" animated />
+          <div class="loading-text">AI正在思考中...</div>
         </div>
         
-        <!-- 文字在下面 -->
-        <div v-if="content" class="chat-message__text">{{ content }}</div>
+        <!-- 正常内容 -->
+        <template v-else>
+          <!-- 图片在上面 -->
+          <div 
+            v-if="imageUrl" 
+            class="chat-message__image"
+            :class="{ 'is-selected': isSelected }"
+            @click="onImageClick"
+          >
+            <img :src="fullImageUrl" alt="上传图片" />
+          </div>
+          
+          <!-- 文字在下面 -->
+          <div v-if="content" class="chat-message__text">{{ content }}</div>
+        </template>
       </div>
     </div>
   </div>
@@ -53,6 +62,10 @@ const props = defineProps({
   isSelected: {
     type: Boolean,
     default: false
+  },
+  isLoading: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -80,6 +93,24 @@ const onImageClick = () => {
 .chat-message {
   display: flex;
   margin-bottom: 12px;
+  
+  &.is-loading {
+    .chat-message__bubble {
+      min-width: 200px;
+    }
+    
+    .chat-message__loading {
+      padding: 12px;
+    }
+    
+    .loading-text {
+      font-size: 12px;
+      color: #909399;
+      margin-top: 8px;
+      text-align: center;
+      animation: pulse 1.5s infinite;
+    }
+  }
   
   &--user {
     flex-direction: row-reverse;
@@ -181,6 +212,12 @@ const onImageClick = () => {
     white-space: pre-wrap;
     line-height: 1.5;
   }
+}
+
+@keyframes pulse {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
 }
 
 @media (max-width: 768px) {

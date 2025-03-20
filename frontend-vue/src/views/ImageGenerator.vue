@@ -3,14 +3,13 @@
     <header class="app-header">
       <h1 class="app-title">AI 图片创作助手</h1>
       <p class="app-subtitle">通过人工智能，让您的创意变为现实</p>
-      <el-button 
-        type="info" 
-        class="refresh-btn" 
+      <button 
+        class="el-button el-button--info refresh-btn" 
         @click="refreshPage"
       >
-        <el-icon class="refresh-icon"><Refresh /></el-icon>
+        <i class="el-icon refresh-icon"><Refresh /></i>
         新的对话
-      </el-button>
+      </button>
     </header>
 
     <div class="main-container">
@@ -54,10 +53,11 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue';
-import { ElButton, ElIcon, ElMessage } from 'element-plus';
+import ElMessage from 'element-plus/es/components/message/index';
 import { Refresh } from '@element-plus/icons-vue';
+import { ChatMessage, ImageData } from '@/types';
 // 移除 ImageUploader 引用
 import ChatHistory from '../components/ChatHistory.vue';
 import EditModeSwitch from '../components/EditModeSwitch.vue';
@@ -67,13 +67,14 @@ import FeatureShowcase from '../components/FeatureShowcase.vue';
 import UsageTips from '../components/UsageTips.vue';
 import apiService from '@/services/apiService';
 
+// 不使用泛型语法，而是使用类型断言
 // 状态管理
 const isProcessing = ref(false);
-const chatMessages = ref([]);
-const currentImage = ref(null);
-const originalImage = ref(null);
-const selectedImage = ref(null);
-const selectedImageId = ref(null);
+const chatMessages = ref([]) as { value: ChatMessage[] };
+const currentImage = ref(null) as { value: File | null };
+const originalImage = ref(null) as { value: File | null };
+const selectedImage = ref(null) as { value: File | null };
+const selectedImageId = ref(null) as { value: string | number | null };
 const generatedImageCount = ref(0);
 const continuousEditMode = ref(true);
 const currentResult = ref({
@@ -94,7 +95,7 @@ const refreshPage = () => {
 };
 
 // 处理文件选择 - 直接从ChatInput组件接收
-const handleFileSelected = (file) => {
+const handleFileSelected = (file: File | null) => {
   if (!file) {
     // 如果file为null，表示清除了图片
     currentImage.value = null;
@@ -127,28 +128,49 @@ const handleFileSelected = (file) => {
 // 移除选择原始图片的方法，因为现在直接在ChatInput选择图片
 
 // 处理选择历史图片
-const handleSelectHistoryImage = (imageData) => {
+const handleSelectHistoryImage = (imageData: ImageData) => {
   selectedImageId.value = imageData.id;
   
   // 从URL加载图片并转换为File对象
   fetch(imageData.fullUrl)
-    .then(response => response.blob())
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`加载图片失败，HTTP状态码: ${response.status}`);
+      }
+      return response.blob();
+    })
     .then(blob => {
-      const file = new File([blob], `selected_${imageData.id}.jpg`, { type: 'image/jpeg' });
+      // 检查blob的MIME类型，确保使用正确的类型和扩展名
+      const mimeType = blob.type || 'image/jpeg';
+      const fileExtension = mimeType.split('/')[1] || 'jpg';
+      
+      // 使用原始MIME类型创建文件
+      const file = new File(
+        [blob], 
+        `selected_${imageData.id}.${fileExtension}`, 
+        { type: mimeType }
+      );
+      
+      console.log('历史图片已加载，准备编辑:', {
+        id: imageData.id,
+        mimeType: mimeType,
+        size: Math.round(blob.size / 1024) + 'KB'
+      });
+      
       selectedImage.value = file;
       currentImage.value = file;
       continuousEditMode.value = false;
       
       ElMessage.success('已选择此图片作为编辑基础');
     })
-    .catch(error => {
+    .catch((error: unknown) => {
       console.error('Error selecting image:', error);
-      ElMessage.error('选择图片失败');
+      ElMessage.error('选择图片失败: ' + (error instanceof Error ? error.message : '未知错误'));
     });
 };
 
 // 处理编辑模式变更
-const handleEditModeChange = (value) => {
+const handleEditModeChange = (value: boolean) => {
   if (value && selectedImage.value) {
     selectedImage.value = null;
     selectedImageId.value = null;
@@ -156,7 +178,7 @@ const handleEditModeChange = (value) => {
 };
 
 // 发送消息
-const handleSendMessage = async (message) => {
+const handleSendMessage = async (message: string) => {
   if (isProcessing.value) return;
   
   // 保存当前图片（如果有）用于API调用
@@ -170,6 +192,14 @@ const handleSendMessage = async (message) => {
     imageId: selectedImageId.value || ('temp-' + Date.now())
   });
   
+  // 立即添加一个加载中的系统消息
+  const loadingMessageIndex = chatMessages.value.length;
+  chatMessages.value.push({
+    type: 'system',
+    content: '正在处理您的请求...',
+    isLoading: true
+  });
+  
   isProcessing.value = true;
   currentResult.value = { text: '正在生成图片，请稍候...', imageUrl: '', imageId: 0 };
   
@@ -179,9 +209,18 @@ const handleSendMessage = async (message) => {
     if (currentImageForRequest instanceof File) {
       // 使用图片生成
       const imageToUse = selectedImage.value || currentImageForRequest;
+      
+      // 记录图片信息
+      console.log('正在发送图片生成请求:', {
+        文件名: imageToUse.name,
+        类型: imageToUse.type,
+        大小: Math.round(imageToUse.size / 1024) + 'KB'
+      });
+      
       response = await apiService.generateFromImage(imageToUse, message);
     } else {
       // 纯文本生成
+      console.log('正在发送文本生成请求:', { 文本长度: message.length });
       response = await apiService.generateFromText(message);
     }
     
@@ -201,9 +240,12 @@ const handleSendMessage = async (message) => {
       imageId: generatedImageCount.value
     };
     
+    // 移除加载消息
+    chatMessages.value.splice(loadingMessageIndex, 1);
+    
     // 添加AI消息到聊天记录
     chatMessages.value.push({
-      type: 'ai',
+      type: 'system',
       content: data.result || '',
       imageUrl: data.image_url,
       imageId: generatedImageCount.value
@@ -214,26 +256,52 @@ const handleSendMessage = async (message) => {
       const imageUrl = apiService.getFullImageUrl(data.image_url);
       
       try {
+        // 从URL获取生成的图片
         const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`获取生成图片失败，HTTP状态码: ${response.status}`);
+        }
+        
         const blob = await response.blob();
-        currentImage.value = new File([blob], `generated_${generatedImageCount.value}.jpg`, { type: 'image/jpeg' });
+        // 检查blob的MIME类型，确保使用正确的类型和扩展名
+        const mimeType = blob.type || 'image/jpeg';
+        const fileExtension = mimeType.split('/')[1] || 'jpg';
+        
+        // 使用正确的MIME类型创建文件
+        currentImage.value = new File(
+          [blob], 
+          `generated_${generatedImageCount.value}.${fileExtension}`, 
+          { type: mimeType }
+        );
+        
+        console.log('连续编辑模式: 已设置新生成的图片为编辑基础', {
+          mimeType,
+          size: Math.round(blob.size / 1024) + 'KB',
+          id: generatedImageCount.value
+        });
       } catch (error) {
-        console.error('Error creating File from image:', error);
+        console.error('创建连续编辑图片文件失败:', error);
+        ElMessage.warning('无法设置生成图片为编辑基础，已退出连续编辑模式');
+        continuousEditMode.value = false;
+        currentImage.value = null;
       }
     } else {
       // 如果不是连续编辑模式，清除当前图片
       currentImage.value = null;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating image:', error);
+    
+    // 移除加载消息
+    chatMessages.value.splice(loadingMessageIndex, 1);
     
     // 添加错误消息
     chatMessages.value.push({
-      type: 'ai',
-      content: `错误：${error.message || '生成失败'}`,
+      type: 'system',
+      content: `错误：${error?.message || '生成失败'}`,
     });
     
-    currentResult.value = { text: `错误：${error.message || '生成失败'}`, imageUrl: '', imageId: 0 };
+    currentResult.value = { text: `错误：${error?.message || '生成失败'}`, imageUrl: '', imageId: 0 };
     ElMessage.error('生成图片失败');
     
     // 发生错误时清除当前图片

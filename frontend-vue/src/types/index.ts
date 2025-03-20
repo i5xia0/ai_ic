@@ -26,6 +26,7 @@ export interface ChatMessage {
   content: string;
   imageUrl?: string;
   imageId?: string | number;
+  isLoading?: boolean;
 }
 
 // 生成结果类型

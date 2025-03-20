@@ -3,6 +3,13 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import sys
+import os
+
+# 确保backend目录在模块搜索路径中
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 from config import CONFIG, setup_logging, setup_directories
 from api import router

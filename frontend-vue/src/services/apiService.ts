@@ -8,7 +8,9 @@ import {
 import { CONFIG } from '@/utils/config';
 
 const API_BASE_URL = CONFIG.baseURL || '/api';
-const IMAGE_BASE_URL = CONFIG.imageBaseURL || '/static/images';
+const IMAGE_BASE_URL = CONFIG.imageBaseURL ? 
+  (CONFIG.imageBaseURL.endsWith('/') ? CONFIG.imageBaseURL : `${CONFIG.imageBaseURL}/`) : 
+  '/';
 
 // 创建axios实例
 const apiClient = axios.create({
@@ -66,7 +68,16 @@ const apiService = {
     if (imagePath.startsWith('http') || imagePath.startsWith('data:')) {
       return imagePath;
     }
-    return `${IMAGE_BASE_URL}${imagePath}`;
+    
+    // 确保路径正确
+    const path = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
+    
+    // 如果路径中没有static，添加static路径
+    if (!path.startsWith('static/') && !path.startsWith('/static/')) {
+      return `${IMAGE_BASE_URL}static/${path}`;
+    }
+    
+    return `${IMAGE_BASE_URL}${path}`;
   },
 
   /**
@@ -127,14 +138,22 @@ const apiService = {
    * @returns 生成结果
    */
   async generateFromImage(file: File, prompt: string): Promise<AxiosResponse<ImageGenerationResponse>> {
+    // 记录详细日志
+    console.log(`准备发送图片生成请求 - 文件: ${file.name}, 类型: ${file.type}, 大小: ${Math.round(file.size / 1024)}KB`);
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('prompt', prompt);
     
+    // 显示明确的请求信息
+    console.log('请求地址:', `${apiClient.defaults.baseURL}/generate`);
+    
     return apiClient.post<ImageGenerationResponse>('/generate', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
-      }
+      },
+      // 增加超时时间
+      timeout: 90000 // 90秒
     });
   },
 

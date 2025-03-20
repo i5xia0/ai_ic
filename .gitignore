@@ -45,3 +45,6 @@ temp/
 # Static files
 static/
 logs/
+
+*.pyc
+*.pid

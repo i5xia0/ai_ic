@@ -26,11 +26,6 @@ import { ref, watch, nextTick } from 'vue';
 import ChatMessage from './ChatMessage.vue';
 import { ChatMessage as ChatMessageType } from '@/types';
 
-interface Props {
-  messages: ChatMessageType[];
-  selectedImageId: string | number | null;
-}
-
 const props = defineProps({
   messages: {
     type: Array,

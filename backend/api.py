@@ -91,12 +91,39 @@ async def generate_from_text(request: dict):
 async def generate_image(file: UploadFile, prompt: str = Form(...)):
     try:
         content_type = file.content_type
-        file_content = await file.read()
-        file_size = len(file_content) / 1024
+        logger.info(f"接收到文件上传 - 文件名: {file.filename}, MIME类型: {content_type}")
         
-        logger.info(f"收到新的图片生成请求 - 文件名: {file.filename}, 大小: {file_size:.2f}KB")
+        # 确保文件是图片类型
+        valid_image_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+        if not content_type or content_type not in valid_image_types:
+            logger.error(f"不支持的图片类型: {content_type}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"不支持的图片类型: {content_type}。请使用以下格式之一: {', '.join(valid_image_types)}"
+            )
         
+        try:
+            file_content = await file.read()
+            file_size_kb = len(file_content) / 1024
+            logger.info(f"文件读取完成 - 文件大小: {file_size_kb:.2f}KB")
+            
+            # 检查文件大小限制 (10MB)
+            if file_size_kb > 10240:
+                logger.error(f"文件太大: {file_size_kb:.2f}KB")
+                raise HTTPException(status_code=400, detail=f"文件太大，最大允许10MB，当前: {file_size_kb:.2f}KB")
+                
+        except Exception as e:
+            logger.error(f"读取上传文件失败: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=400, detail=f"读取文件失败: {str(e)}")
+        
+        if len(file_content) == 0:
+            logger.error("上传文件为空")
+            raise HTTPException(status_code=400, detail="上传的文件为空")
+        
+        # 处理图片 - 调整大小并转为base64
+        logger.info(f"开始处理图片，文件名: {file.filename}，提示词: {prompt[:50]}...")
         img_base64 = await process_image(file_content)
+        logger.info(f"图片处理完成，base64编码长度: {len(img_base64)//1000}K 字符")
         
         api_url = CONFIG['api']['url']
         
